@@ -71,6 +71,9 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def get_url_parts(self, url):
+        # Parsing for url contents
+        # From https://docs.python.org/3/library/urllib.parse.html#urllib.parse.urlparse
+        # From Python3 Docs
         parsed = urllib.parse.urlparse(url)
         port = ""
         if not parsed.port:
@@ -81,9 +84,7 @@ class HTTPClient(object):
         else:
             port = parsed.port
 
-        host = ""
-        if not parsed.hostname:
-            host = parsed.hostname
+        host = parsed.netloc.split(":")[0]
 
         return host, port, parsed.path
 
@@ -96,6 +97,10 @@ class HTTPClient(object):
         self.connect(host, int(port))
 
         # make the request to send to socket
+        # Using Connection:Close to send new requests after a connection is done
+        # From Kannan Mohan https://stackoverflow.com/users/1198887/kannan-mohan
+        # From StackOveflow
+        # From https://stackoverflow.com/a/20402215
         self.sendall(
             "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n" % (path, url))
 
@@ -122,7 +127,54 @@ class HTTPClient(object):
     def POST(self, url, args=None):
         code = 500
         body = ""
-        # print(args)
+
+        # parse url for host and port to connect to socket
+        host, port, path = self.get_url_parts(url)
+        self.connect(host, int(port))
+
+        total_length = 0
+        final_request_body = ""
+
+        if len(urllib.parse.urlencode(args)) <= 1:
+            total_length = 0
+            final_request_body = ""
+        else:
+            final_request_body = urllib.parse.urlencode(args)
+            total_length = len(final_request_body)
+
+        request = """
+        POST %s HTTP/1.1\r\n
+        Host: %s\r\n
+        Content-Type: application/x-www-form-urlencoded\r\n
+        Content-Length: %s\r\n
+        Connection: close\r\n\r\n
+        
+        %s\r\n
+        """ % (path, host, total_length, str(final_request_body))
+        print(request)
+
+        self.sendall(request)
+
+        # get the response from socket
+        response = self.recvall(self.socket)
+        # create the HTTP response object
+        print("ASDS", response)
+
+        if not response:
+            return HTTPResponse(404, "")
+
+        response_parts = response.split("\r\n")
+        first_line = response_parts[0].split(" ")
+        http_code = first_line[1]
+
+        if int(http_code) == 404:
+            code = 404
+        elif int(http_code) == 200:
+            code = 200
+            body = response_parts[-1]
+
+        self.close()
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
