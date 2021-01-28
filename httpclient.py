@@ -70,16 +70,34 @@ class HTTPClient(object):
                 done = not part
         return buffer.decode('utf-8')
 
+    def get_url_parts(self, url):
+        parsed = urllib.parse.urlparse(url)
+        port = ""
+        if not parsed.port:
+            if parsed.scheme == "http":
+                port = 80
+            elif parsed.scheme == "https":
+                port = 443
+        else:
+            port = parsed.port
+
+        host = ""
+        if not parsed.hostname:
+            host = parsed.hostname
+
+        return host, port, parsed.path
+
     def GET(self, url, args=None):
         code = 500
         body = ""
 
         # parse url for host and port to connect to socket
-        parsed = urllib.parse.urlparse(url)
-        self.connect(parsed.hostname, parsed.port)
+        host, port, path = self.get_url_parts(url)
+        self.connect(host, int(port))
 
         # make the request to send to socket
-        self.sendall("GET %s HTTP/1.1\r\nHost: %s" % (parsed.path, url))
+        self.sendall(
+            "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n" % (path, url))
 
         # get the response from socket
         response = self.recvall(self.socket)
@@ -104,7 +122,7 @@ class HTTPClient(object):
     def POST(self, url, args=None):
         code = 500
         body = ""
-        print(args)
+        # print(args)
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
