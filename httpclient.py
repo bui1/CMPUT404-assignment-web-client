@@ -40,6 +40,7 @@ class HTTPClient(object):
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.connect((host, port))
         return None
 
@@ -84,9 +85,28 @@ class HTTPClient(object):
         else:
             port = parsed.port
 
-        host = parsed.netloc.split(":")[0]
+        host = parsed.hostname
+
+        if parsed.path == "":
+            path = "/"
 
         return host, port, parsed.path
+
+    def parse_server_response(self, response):
+        response_parts = response.split("\r\n")
+        first_line = response_parts[0].split(" ")
+        http_code = first_line[1]
+
+        code = 500
+        body = ""
+        if int(http_code) == 404:
+            code = 404
+            body = ""
+        elif int(http_code) == 200:
+            code = 200
+            body = response_parts[-1]
+
+        return code, body
 
     def GET(self, url, args=None):
         code = 500
@@ -109,16 +129,10 @@ class HTTPClient(object):
 
         # create the HTTP response object
         print(response)
+        if not response:
+            return HTTPResponse(404, "")
 
-        response_parts = response.split("\r\n")
-        first_line = response_parts[0].split(" ")
-        http_code = first_line[1]
-
-        if int(http_code) == 404:
-            code = 404
-        elif int(http_code) == 200:
-            code = 200
-            body = response_parts[-1]
+        code, body = self.parse_server_response(response)
 
         self.close()
 
@@ -135,43 +149,35 @@ class HTTPClient(object):
         total_length = 0
         final_request_body = ""
 
-        if len(urllib.parse.urlencode(args)) <= 1:
+        if args is None:
             total_length = 0
             final_request_body = ""
         else:
+            # Encoding url arguments
+            # https://docs.python.org/3/library/urllib.request.html#urllib-examples
+            # From Python3 Docs
             final_request_body = urllib.parse.urlencode(args)
             total_length = len(final_request_body)
 
-        request = """
-        POST %s HTTP/1.1\r\n
-        Host: %s\r\n
-        Content-Type: application/x-www-form-urlencoded\r\n
-        Content-Length: %s\r\n
-        Connection: close\r\n\r\n
-        
-        %s\r\n
-        """ % (path, host, total_length, str(final_request_body))
-        print(request)
+        if args:
+            request = """POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s\r\n
+                    """ % (path, host, total_length, str(final_request_body))
+        else:
+            request = """POST %s HTTP/1.1\r\nHost: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n
+                    """ % (path, host)
 
         self.sendall(request)
 
         # get the response from socket
         response = self.recvall(self.socket)
+
         # create the HTTP response object
-        print("ASDS", response)
+        print(response)
 
         if not response:
             return HTTPResponse(404, "")
 
-        response_parts = response.split("\r\n")
-        first_line = response_parts[0].split(" ")
-        http_code = first_line[1]
-
-        if int(http_code) == 404:
-            code = 404
-        elif int(http_code) == 200:
-            code = 200
-            body = response_parts[-1]
+        code, body = self.parse_server_response(response)
 
         self.close()
 
