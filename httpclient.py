@@ -40,7 +40,6 @@ class HTTPClient(object):
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.connect((host, port))
         return None
 
@@ -87,10 +86,14 @@ class HTTPClient(object):
 
         host = parsed.hostname
 
+        path = parsed.path
         if parsed.path == "":
             path = "/"
 
-        return host, port, parsed.path
+        if parsed.query:
+            path += ("?" + parsed.query)
+
+        return host, port, path
 
     def parse_server_response(self, response):
         response_parts = response.split("\r\n")
@@ -104,6 +107,12 @@ class HTTPClient(object):
             body = ""
         elif int(http_code) == 200:
             code = 200
+            body = response_parts[-1]
+        elif int(http_code) == 301:
+            code = 301
+            body = response_parts[-1]
+        elif int(http_code) == 302:
+            code = 302
             body = response_parts[-1]
 
         return code, body
@@ -122,7 +131,7 @@ class HTTPClient(object):
         # From StackOveflow
         # From https://stackoverflow.com/a/20402215
         self.sendall(
-            "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n" % (path, url))
+            "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n" % (path, host))
 
         # get the response from socket
         response = self.recvall(self.socket)
@@ -159,12 +168,15 @@ class HTTPClient(object):
             final_request_body = urllib.parse.urlencode(args)
             total_length = len(final_request_body)
 
+        # Example of HTTP POST Request
+        # From https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST#example
+        # From MDN Docs
         if args:
             request = """POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s\r\n
-                    """ % (path, host, total_length, str(final_request_body))
+                        """ % (path, host, total_length, str(final_request_body))
         else:
             request = """POST %s HTTP/1.1\r\nHost: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n
-                    """ % (path, host)
+                        """ % (path, host)
 
         self.sendall(request)
 
