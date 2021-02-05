@@ -118,9 +118,6 @@ class HTTPClient(object):
         return code, body
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-
         # parse url for host and port to connect to socket
         host, port, path = self.get_url_parts(url)
         self.connect(host, int(port))
@@ -148,9 +145,6 @@ class HTTPClient(object):
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
-
         # parse url for host and port to connect to socket
         host, port, path = self.get_url_parts(url)
         self.connect(host, int(port))
